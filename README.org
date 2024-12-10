@@ -1,0 +1,4 @@
+#+TITLE: onnx.el
+
+ONNX runtime for Emacs Lisp. Primary motivation is to allow ML based text
+operations inside Emacs, as much as possible, natively.
