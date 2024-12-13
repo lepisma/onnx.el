@@ -30,6 +30,17 @@
 
 ;;; Code:
 
+(defun onnx-load (filepath)
+  "Load onnx file from FILEPATH and return a model object.")
+
+(defun onnx-tokenize-text (text)
+  "Tokenize TEXT and return vector that can be passed as input to a model.")
+
+(defun onnx-run (model input-vector)
+  "Run MODEL on INPUT-VECTOR and return the output vector.
+
+We only support single input and output vector for now.")
+
 (provide 'onnx)
 
 ;;; onnx.el ends here
