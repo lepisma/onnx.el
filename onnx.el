@@ -34,15 +34,31 @@
 
 (defun onnx-load (filepath)
   "Load onnx file from FILEPATH and return a model object."
-  (onnx-core-load-model filepath))
+  (if (file-exists-p filepath)
+      (onnx-core-load-model filepath)
+    (error "Model file %s doesn't exist" filepath)))
 
 (defun onnx-tokenize-text (text)
   "Tokenize TEXT and return vector that can be passed as input to a model.")
 
+(defun onnx-input-names (model)
+  "Return list of strings specifying input names for the MODEL."
+  (onnx-core-model-input-names model))
+
+(defun onnx-output-names (model)
+  "Return list of strings specifying output names for the MODEL."
+  (onnx-core-model-output-names model))
+
 (defun onnx-run (model input-names output-names input-vector)
   "Run MODEL on INPUT-VECTOR and return the output vector.
 
-We only support single input and output vector for now.")
+INPUT-NAMES is a list of strings identifying the input tap in the
+model, OUTPUT-NAMES is the equivalent for output. We only support
+single input and output for now."
+  (if (and (= (length input-names) 1)
+           (= (length output-names) 1))
+      (onnx-core-run model input-names output-names input-vector)
+    (error "Input and output name lists should be of length 1")))
 
 (provide 'onnx)
 
