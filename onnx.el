@@ -30,13 +30,16 @@
 
 ;;; Code:
 
+(require 'onnx-core)
+
 (defun onnx-load (filepath)
-  "Load onnx file from FILEPATH and return a model object.")
+  "Load onnx file from FILEPATH and return a model object."
+  (onnx-core-load-model filepath))
 
 (defun onnx-tokenize-text (text)
   "Tokenize TEXT and return vector that can be passed as input to a model.")
 
-(defun onnx-run (model input-vector)
+(defun onnx-run (model input-names output-names input-vector)
   "Run MODEL on INPUT-VECTOR and return the output vector.
 
 We only support single input and output vector for now.")
