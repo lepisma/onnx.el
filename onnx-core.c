@@ -227,6 +227,15 @@ emacs_value Fonnx_model_output_names(emacs_env* env, ptrdiff_t n, emacs_value ar
   return result;
 }
 
+// Arguments:
+// 1. model (user pointer)
+// 2. input-names (list)
+// 3. output-names (list)
+// 4. input (vector)
+emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
+  struct model_t* model = env->get_user_ptr(env, args[0]);
+}
+
 static emacs_value Fonnx_core_version(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
   return env->make_string(env, onnx_core_version, strlen(onnx_core_version));
 }
@@ -254,6 +263,10 @@ int emacs_module_init(struct emacs_runtime* runtime) {
   emacs_value output_names_fn = g_env->make_function(g_env, 1, 1, Fonnx_model_output_names, "Return a list of output names for the model.", NULL);
   emacs_value output_names_fn_args[] = {g_env->intern(g_env, "onnx-core-model-output-names"), output_names_fn};
   g_env->funcall(g_env, g_env->intern(g_env, "defalias"), 2, output_names_fn_args);
+
+  emacs_value run_fn = g_env->make_function(g_env, 4, 4, Fonnx_run, "Run given vector via the model.", NULL);
+  emacs_value run_fn_args[] = {g_env->intern(g_env, "onnx-core-run"), run_fn};
+  g_env->funcall(g_env, g_env->intern(g_env, "defalias"), 2, run_fn_args);
 
   emacs_value provide_fn_args[] = {g_env->intern(g_env, "onnx-core")};
   g_env->funcall(g_env, g_env->intern(g_env, "provide"), 1, provide_fn_args);
