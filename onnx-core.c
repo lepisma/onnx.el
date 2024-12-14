@@ -84,18 +84,84 @@ struct model_t load_model(ORTCHAR_T* model_path) {
   return model;
 }
 
-void clean_up_model(struct model_t model) {
-  g_ort->ReleaseSessionOptions(model.session_options);
-  g_ort->ReleaseSession(model.session);
-  g_ort->ReleaseEnv(model.env);
+size_t model_input_count(struct model_t* model) {
+  size_t n;
+  ORT_RAISE_ON_ERROR(g_ort->SessionGetInputCount(model->session, &n));
+  return n;
+}
+
+char** model_input_names(struct model_t* model) {
+  size_t n = model_input_count(model);
+
+  OrtAllocator* allocator;
+  ORT_RAISE_ON_ERROR(g_ort->GetAllocatorWithDefaultOptions(&allocator));
+
+  char** input_names = malloc(sizeof(char*) * n);
+
+  size_t i;
+  for (i = 0; i < n; i++) {
+    char* name;
+    ORT_RAISE_ON_ERROR(g_ort->SessionGetInputName(model->session, i, allocator, &name));
+    input_names[i] = malloc(strlen(name) + 1);
+    strcpy(input_names[i], name);
+    ORT_RAISE_ON_ERROR(g_ort->AllocatorFree(allocator, name));
+  }
+
+  return input_names;
+}
+
+size_t model_output_count(struct model_t* model) {
+  size_t n;
+  ORT_RAISE_ON_ERROR(g_ort->SessionGetOutputCount(model->session, &n));
+  return n;
+}
+
+char** model_output_names(struct model_t* model) {
+  size_t n = model_output_count(model);
+
+  OrtAllocator* allocator;
+  ORT_RAISE_ON_ERROR(g_ort->GetAllocatorWithDefaultOptions(&allocator));
+
+  char** output_names = malloc(sizeof(char*) * n);
+
+  size_t i;
+  for (i = 0; i < n; i++) {
+    char* name;
+    ORT_RAISE_ON_ERROR(g_ort->SessionGetOutputName(model->session, i, allocator, &name));
+    output_names[i] = malloc(strlen(name) + 1);
+    strcpy(output_names[i], name);
+    ORT_RAISE_ON_ERROR(g_ort->AllocatorFree(allocator, name));
+  }
+
+  return output_names;
+}
+
+void clean_up_model(struct model_t* model) {
+  g_ort->ReleaseSessionOptions(model->session_options);
+  g_ort->ReleaseSession(model->session);
+  g_ort->ReleaseEnv(model->env);
 }
 
 void fin_model(void* ptr) {
   struct model_t* model = (struct model_t*)ptr;
   if (model) {
-    clean_up_model(*model);
+    clean_up_model(model);
     free(model);
   }
+}
+
+void free_char_array(char** array, size_t count) {
+    if (!array) {
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        if (array[i]) {
+            free(array[i]);
+        }
+    }
+
+    free(array);
 }
 
 emacs_value Fonnx_load_model(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
@@ -119,6 +185,48 @@ emacs_value Fonnx_load_model(emacs_env* env, ptrdiff_t n, emacs_value args[], vo
   return env->make_user_ptr(env, fin_model, model);
 }
 
+emacs_value Fonnx_model_input_names(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
+  struct model_t* model = env->get_user_ptr(env, args[0]);
+
+  char** input_names = model_input_names(model);
+  size_t input_count = model_input_count(model);
+
+  size_t i;
+  emacs_value* emacs_strings = malloc(sizeof(emacs_value) * input_count);
+
+  for (i = 0; i < input_count; i++) {
+    emacs_strings[i] = env->make_string(env, input_names[i], strlen(input_names[i]));
+  }
+
+  emacs_value result = env->funcall(env, env->intern(env, "list"), input_count, emacs_strings);
+
+  free(emacs_strings);
+  free_char_array(input_names, input_count);
+
+  return result;
+}
+
+emacs_value Fonnx_model_output_names(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
+  struct model_t* model = env->get_user_ptr(env, args[0]);
+
+  char** output_names = model_output_names(model);
+  size_t output_count = model_output_count(model);
+
+  size_t i;
+  emacs_value* emacs_strings = malloc(sizeof(emacs_value) * output_count);
+
+  for (i = 0; i < output_count; i++) {
+    emacs_strings[i] = env->make_string(env, output_names[i], strlen(output_names[i]));
+  }
+
+  emacs_value result = env->funcall(env, env->intern(env, "list"), output_count, emacs_strings);
+
+  free(emacs_strings);
+  free_char_array(output_names, output_count);
+
+  return result;
+}
+
 static emacs_value Fonnx_core_version(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
   return env->make_string(env, onnx_core_version, strlen(onnx_core_version));
 }
@@ -138,6 +246,14 @@ int emacs_module_init(struct emacs_runtime* runtime) {
   emacs_value load_fn = g_env->make_function(g_env, 1, 1, Fonnx_load_model, "Load given ONNX model file.", NULL);
   emacs_value load_fn_args[] = {g_env->intern(g_env, "onnx-core-load-model"), load_fn};
   g_env->funcall(g_env, g_env->intern(g_env, "defalias"), 2, load_fn_args);
+
+  emacs_value input_names_fn = g_env->make_function(g_env, 1, 1, Fonnx_model_input_names, "Return a list of input names for the model.", NULL);
+  emacs_value input_names_fn_args[] = {g_env->intern(g_env, "onnx-core-model-input-names"), input_names_fn};
+  g_env->funcall(g_env, g_env->intern(g_env, "defalias"), 2, input_names_fn_args);
+
+  emacs_value output_names_fn = g_env->make_function(g_env, 1, 1, Fonnx_model_output_names, "Return a list of output names for the model.", NULL);
+  emacs_value output_names_fn_args[] = {g_env->intern(g_env, "onnx-core-model-output-names"), output_names_fn};
+  g_env->funcall(g_env, g_env->intern(g_env, "defalias"), 2, output_names_fn_args);
 
   emacs_value provide_fn_args[] = {g_env->intern(g_env, "onnx-core")};
   g_env->funcall(g_env, g_env->intern(g_env, "provide"), 1, provide_fn_args);
