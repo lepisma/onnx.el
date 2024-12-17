@@ -250,10 +250,6 @@ char** get_list_of_strings(emacs_env* env, emacs_value list, size_t* list_len) {
   return output;
 }
 
-/*
- * Read Emacs vector and return its shape for ORT. Also set the value of
- * VECTOR_SHAPE_LEN to the count of elements in the shape vector.
- */
 size_t* emacs_vector_to_size_array(emacs_env* env, emacs_value vector, size_t vector_len) {
   size_t* output = malloc(sizeof(size_t) * vector_len);
 
@@ -264,11 +260,26 @@ size_t* emacs_vector_to_size_array(emacs_env* env, emacs_value vector, size_t ve
   return output;
 }
 
-// Arguments:
-// 1. model (user pointer)
-// 2. input-names (list)
-// 3. output-names (list)
-// 4. input (vector)
+float* emacs_vector_to_float_array(emacs_env* env, emacs_value vector, size_t vector_len) {
+  float* output = malloc(sizeof(float) * vector_len);
+
+  for (size_t i = 0; i < vector_len; i++) {
+    output[i] = env->extract_float(env, env->vec_get(env, vector, i));
+  }
+
+  return output;
+}
+
+/*
+ * Return an Emacs vector representing the model output
+ *
+ * Arguments:
+ * 0. model (user pointer)
+ * 1. input-names (list)
+ * 2. output-names (list)
+ * 3. input (flat vector)
+ * 4. input-shape (flat vector)
+ */
 emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
   struct model_t* model = env->get_user_ptr(env, args[0]);
 }

@@ -55,6 +55,11 @@
       (onnx--vector-shape (aref vector 0) (cons (length vector) shape))
     (apply #'vector (reverse shape))))
 
+(defun onnx--vector-flatten (vector)
+  (if (vectorp (aref vector 0))
+      (apply #'vconcat (mapcar #'onnx--vector-flatten vector))
+    vector))
+
 (defun onnx-run (model input-names output-names input-vector)
   "Run MODEL on INPUT-VECTOR and return the output vector.
 
@@ -63,7 +68,7 @@ model, OUTPUT-NAMES is the equivalent for output. We only support
 single input and output for now."
   (if (and (= (length input-names) 1)
            (= (length output-names) 1))
-      (onnx-core-run model input-names output-names input-vector (onnx--vector-shape input-vector))
+      (onnx-core-run model input-names output-names (onnx-vector-flatten input-vector) (onnx--vector-shape input-vector))
     (error "Input and output name lists should be of length 1")))
 
 (provide 'onnx)
