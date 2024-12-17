@@ -27,9 +27,6 @@ void emacs_signal_error(emacs_env *env, const char* code, const char* message) {
     }                                                           \
   } while (0);
 
-void run_inference(OrtSession* session, float* input, size_t input_size, float* output, size_t output_size) {
-}
-
 // For now we only work with single input and output models
 void verify_input_output_count(OrtSession* session) {
   size_t count;
