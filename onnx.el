@@ -50,26 +50,26 @@
   "Return list of strings specifying output names for the MODEL."
   (onnx-core-model-output-names model))
 
-(defun onnx--vector-shape (vector &optional shape)
-  "Return shape of a numeric VECTOR (regular matrix) in form of a vector."
-  (if (vectorp vector)
-      (onnx--vector-shape (aref vector 0) (cons (length vector) shape))
+(defun onnx--matrix-shape (matrix &optional shape)
+  "Return shape of a numeric MATRIX (based on Emacs vector) in form of a vector."
+  (if (vectorp matrix)
+      (onnx--matrix-shape (aref matrix 0) (cons (length matrix) shape))
     (apply #'vector (reverse shape))))
 
-(defun onnx--vector-flatten (vector)
-  (if (vectorp (aref vector 0))
-      (apply #'vconcat (mapcar #'onnx--vector-flatten vector))
-    vector))
+(defun onnx--matrix-flatten (matrix)
+  (if (vectorp (aref matrix 0))
+      (apply #'vconcat (mapcar #'onnx--matrix-flatten matrix))
+    matrix))
 
-(defun onnx-run (model input-names output-names input-vector)
-  "Run MODEL on INPUT-VECTOR and return the output vector.
+(defun onnx-run (model input-names output-names input-matrix)
+  "Run MODEL on INPUT-MATRIX and return the output vector.
 
 INPUT-NAMES is a list of strings identifying the input tap in the
 model, OUTPUT-NAMES is the equivalent for output. We only support
 single input and output for now."
   (if (and (= (length input-names) 1)
            (= (length output-names) 1))
-      (onnx-core-run model input-names output-names (onnx--vector-flatten input-vector) (onnx--vector-shape input-vector))
+      (onnx-core-run model input-names output-names (onnx--matrix-flatten input-matrix) (onnx--matrix-shape input-matrix))
     (error "Input and output name lists should be of length 1")))
 
 (provide 'onnx)
