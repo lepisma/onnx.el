@@ -382,7 +382,6 @@ emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* dat
   free_char_array(output_names, output_names_len);
   free(input_shape);
   free(output_shape);
-  free(output_tensor_data);
 
   return env->funcall(env, env->intern(env, "cons"), 2, (emacs_value[]){emacs_output_vector, emacs_output_shape});
 }
