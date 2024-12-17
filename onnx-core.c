@@ -1,4 +1,5 @@
 #include <emacs-module.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
@@ -270,8 +271,22 @@ float* emacs_vector_to_float_array(emacs_env* env, emacs_value vector, size_t ve
   return output;
 }
 
+size_t prod_array_size_t(size_t* array, size_t len) {
+  size_t output;
+  for (size_t i = 0; i < len; i++) {
+    if (i == 0) {
+      output = array[i];
+    } else {
+      output = output * array[i];
+    }
+  }
+
+  return output;
+}
+
 /*
- * Return an Emacs vector representing the model output
+ * Return a cons of vector representing the model output and the shape of the
+ * vector.
  *
  * Arguments:
  * 0. model (user pointer)
@@ -282,6 +297,94 @@ float* emacs_vector_to_float_array(emacs_env* env, emacs_value vector, size_t ve
  */
 emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
   struct model_t* model = env->get_user_ptr(env, args[0]);
+
+  size_t input_names_len;
+  char** input_names = get_list_of_strings(env, args[1], &input_names_len);
+
+  size_t output_names_len;
+  char** output_names = get_list_of_strings(env, args[2], &output_names_len);
+
+  size_t input_shape_len = env->vec_size(env, args[4]);
+  size_t* input_shape = emacs_vector_to_size_array(env, args[4], input_shape_len);
+
+  if (input_shape_len < 1) {
+    emacs_signal_error(env, "onnx-input-error", "Input shape length is less than 1");
+    return env->intern(env, "nil");
+  }
+
+  size_t input_len = prod_array_size_t(input_shape, input_shape_len);
+  float* input_flat = emacs_vector_to_float_array(env, args[3], input_len);
+
+  OrtMemoryInfo* memory_info;
+  ORT_RAISE_ON_ERROR(g_ort->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
+
+  OrtValue* input_tensor = NULL;
+  ORT_RAISE_ON_ERROR(g_ort->CreateTensorWithDataAsOrtValue(memory_info, input_flat,
+                                                           input_len * sizeof(float), input_shape, input_shape_len,
+                                                           ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input_tensor));
+  if (input_tensor == NULL) {
+    emacs_signal_error(env, "onnx-error", "Input tensor is NULL");
+    return env->intern(env, "nil");
+  }
+  int is_tensor;
+  ORT_RAISE_ON_ERROR(g_ort->IsTensor(input_tensor, &is_tensor));
+  if (!is_tensor) {
+    emacs_signal_error(env, "onnx-error", "Unable to build input tensor");
+    return env->intern(env, "nil");
+  }
+  g_ort->ReleaseMemoryInfo(memory_info);
+
+  OrtValue* output_tensor = NULL;
+  ORT_RAISE_ON_ERROR(g_ort->Run(model->session, NULL,
+                                (const char* const*)input_names, (const OrtValue* const*)&input_tensor, input_names_len,
+                                (const char* const*)output_names, output_names_len, &output_tensor));
+  if (output_tensor == NULL) {
+    emacs_signal_error(env, "onnx-error", "Output tensor is NULL");
+  }
+  ORT_RAISE_ON_ERROR(g_ort->IsTensor(output_tensor, &is_tensor));
+  if (!is_tensor) {
+    emacs_signal_error(env, "onnx-error", "Unable to build output tensor");
+  }
+
+  float* output_tensor_data = NULL;
+  ORT_RAISE_ON_ERROR(g_ort->GetTensorMutableData(output_tensor, (void**)&output_tensor_data));
+
+  OrtTensorTypeAndShapeInfo* output_type_and_shape_info;
+  ORT_RAISE_ON_ERROR(g_ort->GetTensorTypeAndShape(output_tensor, &output_type_and_shape_info));
+
+  size_t output_shape_len;
+  ORT_RAISE_ON_ERROR(g_ort->GetDimensionsCount(output_type_and_shape_info, &output_shape_len));
+
+  int64_t* output_shape = malloc(sizeof(int64_t) * output_shape_len);
+  ORT_RAISE_ON_ERROR(g_ort->GetDimensions(output_type_and_shape_info, output_shape, output_shape_len));
+
+  size_t output_len = prod_array_size_t(output_shape, output_shape_len);
+
+  emacs_value* emacs_output_items = malloc(sizeof(emacs_value) * output_len);
+  for (size_t i = 0; i < output_len; i++) {
+    emacs_output_items[i] = env->make_float(env, output_tensor_data[i]);
+  }
+  emacs_value emacs_output_vector = env->funcall(env, env->intern(env, "vector"), output_len, emacs_output_items);
+  free(emacs_output_items);
+
+  emacs_value* emacs_output_shape_items = malloc(sizeof(emacs_value) * output_shape_len);
+  for (size_t i = 0; i < output_shape_len; i++) {
+    emacs_output_shape_items[i] = env->make_integer(env, output_shape[i]);
+  }
+  emacs_value emacs_output_shape = env->funcall(env, env->intern(env, "vector"), output_shape_len, emacs_output_shape_items);
+  free(emacs_output_shape_items);
+
+  g_ort->ReleaseValue(output_tensor);
+  g_ort->ReleaseValue(input_tensor);
+  g_ort->ReleaseTensorTypeAndShapeInfo(output_type_and_shape_info);
+  free(input_flat);
+  free_char_array(input_names, input_names_len);
+  free_char_array(output_names, output_names_len);
+  free(input_shape);
+  free(output_shape);
+  free(output_tensor_data);
+
+  return env->funcall(env, env->intern(env, "cons"), 2, (emacs_value[]){emacs_output_vector, emacs_output_shape});
 }
 
 static emacs_value Fonnx_core_version(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
