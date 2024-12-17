@@ -3,7 +3,7 @@
 ;; Copyright (c) 2024 Abhinav Tushar
 
 ;; Author: Abhinav Tushar <abhinav@lepisma.xyz>
-;; Version: 0.0.1
+;; Version: 0.1.0
 ;; Package-Requires: ((emacs "29"))
 ;; Keywords: ml
 ;; URL: https://github.com/lepisma/onnx.el
