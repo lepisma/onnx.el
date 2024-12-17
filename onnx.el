@@ -49,6 +49,12 @@
   "Return list of strings specifying output names for the MODEL."
   (onnx-core-model-output-names model))
 
+(defun onnx--vector-shape (vector &optional shape)
+  "Return shape of a numeric VECTOR (regular matrix) in form of a vector."
+  (if (vectorp vector)
+      (onnx--vector-shape (aref vector 0) (cons (length vector) shape))
+    (apply #'vector (reverse shape))))
+
 (defun onnx-run (model input-names output-names input-vector)
   "Run MODEL on INPUT-VECTOR and return the output vector.
 
@@ -57,7 +63,7 @@ model, OUTPUT-NAMES is the equivalent for output. We only support
 single input and output for now."
   (if (and (= (length input-names) 1)
            (= (length output-names) 1))
-      (onnx-core-run model input-names output-names input-vector)
+      (onnx-core-run model input-names output-names input-vector (onnx--vector-shape input-vector))
     (error "Input and output name lists should be of length 1")))
 
 (provide 'onnx)

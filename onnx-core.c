@@ -249,6 +249,21 @@ char** get_list_of_strings(emacs_env* env, emacs_value list, size_t* list_len) {
 
   return output;
 }
+
+/*
+ * Read Emacs vector and return its shape for ORT. Also set the value of
+ * VECTOR_SHAPE_LEN to the count of elements in the shape vector.
+ */
+size_t* emacs_vector_to_size_array(emacs_env* env, emacs_value vector, size_t vector_len) {
+  size_t* output = malloc(sizeof(size_t) * vector_len);
+
+  for (size_t i = 0; i < vector_len; i++) {
+    output[i] = env->extract_integer(env, env->vec_get(env, vector, i));
+  }
+
+  return output;
+}
+
 // Arguments:
 // 1. model (user pointer)
 // 2. input-names (list)
@@ -286,7 +301,7 @@ int emacs_module_init(struct emacs_runtime* runtime) {
   emacs_value output_names_fn_args[] = {g_env->intern(g_env, "onnx-core-model-output-names"), output_names_fn};
   g_env->funcall(g_env, g_env->intern(g_env, "defalias"), 2, output_names_fn_args);
 
-  emacs_value run_fn = g_env->make_function(g_env, 4, 4, Fonnx_run, "Run given vector via the model.", NULL);
+  emacs_value run_fn = g_env->make_function(g_env, 5, 5, Fonnx_run, "Run given vector via the model.", NULL);
   emacs_value run_fn_args[] = {g_env->intern(g_env, "onnx-core-run"), run_fn};
   g_env->funcall(g_env, g_env->intern(g_env, "defalias"), 2, run_fn_args);
 
