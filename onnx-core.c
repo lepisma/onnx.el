@@ -227,6 +227,28 @@ emacs_value Fonnx_model_output_names(emacs_env* env, ptrdiff_t n, emacs_value ar
   return result;
 }
 
+/*
+ * Read and return a list of strings from ARG. Set LIST_LEN to be the length of
+ * the list.
+ */
+char** get_list_of_strings(emacs_env* env, emacs_value list, size_t* list_len) {
+  emacs_value e_len = env->funcall(env, env->intern(env, "length"), 1, (emacs_value[]){list});
+  *list_len = env->extract_integer(env, e_len);
+
+  char** output = malloc(sizeof(char*) * (*list_len));
+
+  emacs_value item;
+  size_t str_len;
+  for (size_t i = 0; i < *list_len; i++) {
+    item = env->funcall(env, env->intern(env, "nth"), 2, (emacs_value[]){env->make_integer(env, i), list});
+    env->copy_string_contents(env, item, NULL, &str_len);
+    char* str = malloc(sizeof(char) * str_len);
+    env->copy_string_contents(env, item, str, &str_len);
+    output[i] = str;
+  }
+
+  return output;
+}
 // Arguments:
 // 1. model (user pointer)
 // 2. input-names (list)
