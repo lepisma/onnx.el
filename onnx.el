@@ -34,9 +34,10 @@
 
 (defun onnx-load (filepath)
   "Load onnx file from FILEPATH and return a model object."
-  (if (file-exists-p filepath)
-      (onnx-core-load-model filepath)
-    (error "Model file %s doesn't exist" filepath)))
+  (let ((filepath (expand-file-name filepath)))
+    (if (file-exists-p filepath)
+        (onnx-core-load-model filepath)
+      (error "Model file %s doesn't exist" filepath))))
 
 (defun onnx-tokenize-text (text)
   "Tokenize TEXT and return vector that can be passed as input to a model.")
