@@ -31,6 +31,7 @@
 ;;; Code:
 
 (require 'onnx-core)
+(require 'cl-macs)
 
 (defun onnx-load (filepath)
   "Load onnx file from FILEPATH and return a model object."
@@ -51,15 +52,29 @@
   (onnx-core-model-output-names model))
 
 (defun onnx--matrix-shape (matrix &optional shape)
-  "Return shape of a numeric MATRIX (based on Emacs vector) in form of a vector."
+  "Return shape of a numeric MATRIX (based on Emacs vector) in form
+of a list."
   (if (vectorp matrix)
       (onnx--matrix-shape (aref matrix 0) (cons (length matrix) shape))
-    (apply #'vector (reverse shape))))
+    (reverse shape)))
 
 (defun onnx--matrix-flatten (matrix)
   (if (vectorp (aref matrix 0))
       (apply #'vconcat (mapcar #'onnx--matrix-flatten matrix))
     matrix))
+
+(defun onnx--vector-reshape (vector shape)
+  "Convert a flat VECTOR to a matrix with given SHAPE (list)."
+  (if (= 1 (length shape))
+      vector
+    (let* ((rows (car shape))
+           (cols (apply #'* (cdr shape)))
+           (step (/ (length vector) rows)))
+      (apply #'vector
+             (cl-loop for i from 0 below rows
+                      collect (onnx--vector-reshape
+                               (subseq vector (* i step) (* (1+ i) step))
+                               (cdr shape)))))))
 
 (defun onnx-run (model input-names output-names input-matrix)
   "Run MODEL on INPUT-MATRIX and return the output vector.
@@ -69,8 +84,11 @@ model, OUTPUT-NAMES is the equivalent for output. We only support
 single input and output for now."
   (if (and (= (length input-names) 1)
            (= (length output-names) 1))
-      (onnx-core-run model input-names output-names (onnx--matrix-flatten input-matrix) (onnx--matrix-shape input-matrix))
-    (error "Input and output name lists should be of length 1")))
+      (let ((result (onnx-core-run model input-names output-names
+                                   (onnx--matrix-flatten input-matrix)
+                                   (apply #'vector (onnx--matrix-shape input-matrix)))))
+        (onnx--vector-reshape (car result) (mapcar #'identity (cdr result))))
+    (error "Input and output name lists should both be of length 1")))
 
 (provide 'onnx)
 
