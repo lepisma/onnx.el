@@ -69,7 +69,7 @@ model, OUTPUT-NAMES is the equivalent for output. We only support
 single input and output for now."
   (if (and (= (length input-names) 1)
            (= (length output-names) 1))
-      (onnx-core-run model input-names output-names (onnx-vector-flatten input-vector) (onnx--vector-shape input-vector))
+      (onnx-core-run model input-names output-names (onnx--vector-flatten input-vector) (onnx--vector-shape input-vector))
     (error "Input and output name lists should be of length 1")))
 
 (provide 'onnx)
