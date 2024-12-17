@@ -2,3 +2,33 @@
 
 ONNX runtime for Emacs Lisp. Primary motivation is to allow ML based text
 operations inside Emacs, as much as possible, natively.
+
+* Installation and Usage
+Since the package in under development, you will have to manually compile the
+dynamic module. To do so run ~make~ after ensuring that you have [[https://onnxruntime.ai/][onnxruntime]]
+development package installed for your distro.
+
+Once built, you can load the package and use like the following:
+
+#+begin_src emacs-lisp
+  (require 'onnx)
+
+  (setq model (onnx-load "path/to/model.onnx"))
+
+  ;; Currently this package only supports CPU execution mode
+  (onnx-run model '("input-node-name") '("output-node-name") input-matrix)
+#+end_src
+
+See ~./tests/~ directory for simple examples.
+
+** Input & Output
+This package only allows running ONNX models on numerical vectors. To do
+anything meaningful with them, you will need to do some preprocessing and
+postprocessing. For example to compute sentence embeddings and find similarity,
+you will need to process text in tokens (ids) that your model can accept, and
+then compute, say, cosine similarity on an index of output vectors.
+
+This portion of the work will not be part of the main onnx.el package and will
+be developed separately (probably in the same repository). I, personally, want
+to run sentence transformer models like [[https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2][this]] with an index of vectors so that
+use case will get supported the earliest.
