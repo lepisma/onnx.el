@@ -28,7 +28,7 @@ double compute_l2_norm(emacs_env *env, emacs_value vector) {
  * Normalize given numerical single dimensional vector using L2 norm
  * destructively.
  */
-void nl2_normalize(emacs_env *env, emacs_value vector) {
+void nl2_normalize(emacs_env* env, emacs_value vector) {
   double norm = compute_l2_norm(env, vector);
   size_t len = env->vec_size(env, vector);
 
