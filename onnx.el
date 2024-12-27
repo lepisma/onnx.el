@@ -87,8 +87,8 @@ We only support single input and single output at the moment."
   (if (and (= (length input-alist) 1)
            (= (length output-names) 1))
       (let ((result (onnx-core-run model (mapcar #'car input-alist) output-names
-                                   (onnx--matrix-flatten (cdar input-alist))
-                                   (apply #'vector (onnx--matrix-shape (cdar input-alist))))))
+                                   (mapcar (lambda (it) (onnx--matrix-flatten (cdr it))) input-alist)
+                                   (mapcar (lambda (it) (apply #'vector (onnx--matrix-shape (cdr it)))) input-alist))))
         (onnx--vector-reshape (car result) (mapcar #'identity (cdr result))))
     (error "We only support runs with single input and output at the moment.")))
 
