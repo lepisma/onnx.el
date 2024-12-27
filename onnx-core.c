@@ -258,6 +258,17 @@ size_t* emacs_vector_to_size_array(emacs_env* env, emacs_value vector, size_t ve
   return output;
 }
 
+/*
+ * Return nth item from an Emacs list. No sanity check is done here.
+ */
+emacs_value list_nth(emacs_env* env, emacs_value list, size_t n) {
+  return env->funcall(env, env->intern(env, "nth"), 2, (emacs_value[]){env->make_integer(env, n), list});
+}
+
+/*
+ * Take a single flat Emacs vector with floating values and convert to a C float
+ * array.
+ */
 float* emacs_vector_to_float_array(emacs_env* env, emacs_value vector, size_t vector_len) {
   float* output = malloc(sizeof(float) * vector_len);
 
@@ -283,58 +294,72 @@ size_t prod_array_size_t(size_t* array, size_t len) {
 
 /*
  * Return a cons of vector representing the model output and the shape of the
- * vector.
+ * vector. We assume that the caller will take care of length validity and other
+ * basic checks.
  *
  * Arguments:
  * 0. model (user pointer)
- * 1. input-names (list)
- * 2. output-names (list)
- * 3. input (flat vector)
- * 4. input-shape (flat vector)
+ * 1. input-names (list of strings)
+ * 2. output-names (list of strings)
+ * 3. inputs (list of flat vectors)
+ * 4. input-shapes (list of flat vector)
  */
 emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
   struct model_t* model = env->get_user_ptr(env, args[0]);
 
-  size_t input_names_len;
-  char** input_names = get_list_of_strings(env, args[1], &input_names_len);
+  size_t n_inputs;
+  char** input_names = get_list_of_strings(env, args[1], &n_inputs);
 
-  size_t output_names_len;
-  char** output_names = get_list_of_strings(env, args[2], &output_names_len);
+  size_t n_outputs;
+  char** output_names = get_list_of_strings(env, args[2], &n_outputs);
 
-  size_t input_shape_len = env->vec_size(env, args[4]);
-  size_t* input_shape = emacs_vector_to_size_array(env, args[4], input_shape_len);
+  size_t input_lens[n_inputs];            // Lengths of input vectors
+  float* input_vs[n_inputs];              // Flat input vectors
+  size_t input_shapes_lens[n_inputs];     // Lengths of input shape vectors
+  size_t* input_shapes[n_inputs];         // Input shape vectors
 
-  if (input_shape_len < 1) {
-    emacs_signal_error(env, "onnx-input-error", "Input shape length is less than 1");
-    return env->intern(env, "nil");
+  emacs_value vector;
+  emacs_value shape_vector;
+  for (size_t i = 0; i < n_inputs; i++) {
+    vector = list_nth(env, args[3], i);
+    shape_vector = list_nth(env, args[4], i);
+
+    input_lens[i] = env->vec_size(env, vector);
+    input_vs[i] = emacs_vector_to_float_array(env, vector, input_lens[i]);
+    input_shapes_lens[i] = env->vec_size(env, shape_vector);
+    input_shapes[i] = emacs_vector_to_size_array(env, shape_vector, input_shapes_lens[i]);
   }
-
-  size_t input_len = prod_array_size_t(input_shape, input_shape_len);
-  float* input_flat = emacs_vector_to_float_array(env, args[3], input_len);
 
   OrtMemoryInfo* memory_info;
   ORT_RAISE_ON_ERROR(g_ort->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
 
-  OrtValue* input_tensor = NULL;
-  ORT_RAISE_ON_ERROR(g_ort->CreateTensorWithDataAsOrtValue(memory_info, input_flat,
-                                                           input_len * sizeof(float), input_shape, input_shape_len,
-                                                           ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input_tensor));
-  if (input_tensor == NULL) {
-    emacs_signal_error(env, "onnx-error", "Input tensor is NULL");
-    return env->intern(env, "nil");
-  }
+  OrtValue* input_tensors[n_inputs];
+
   int is_tensor;
-  ORT_RAISE_ON_ERROR(g_ort->IsTensor(input_tensor, &is_tensor));
-  if (!is_tensor) {
-    emacs_signal_error(env, "onnx-error", "Unable to build input tensor");
-    return env->intern(env, "nil");
+  for (size_t i = 0; i < n_inputs; i++) {
+    ORT_RAISE_ON_ERROR(g_ort->CreateTensorWithDataAsOrtValue(
+        memory_info, input_vs[i], input_lens[i] * sizeof(float),
+        input_shapes[i], input_shapes_lens[i],
+        ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input_tensors[i]));
+
+    if (input_tensors[i] == NULL) {
+        emacs_signal_error(env, "onnx-error", "One of the input tensors is NULL");
+        return env->intern(env, "nil");
+    }
+
+    ORT_RAISE_ON_ERROR(g_ort->IsTensor(input_tensors[i], &is_tensor));
+    if (!is_tensor) {
+      emacs_signal_error(env, "onnx-error", "Unable to build input tensor");
+      return env->intern(env, "nil");
+    }
   }
+
   g_ort->ReleaseMemoryInfo(memory_info);
 
   OrtValue* output_tensor = NULL;
   ORT_RAISE_ON_ERROR(g_ort->Run(model->session, NULL,
-                                (const char* const*)input_names, (const OrtValue* const*)&input_tensor, input_names_len,
-                                (const char* const*)output_names, output_names_len, &output_tensor));
+                                (const char* const*)input_names, (const OrtValue* const*)input_tensors, n_inputs,
+                                (const char* const*)output_names, n_outputs, &output_tensor));
   if (output_tensor == NULL) {
     emacs_signal_error(env, "onnx-error", "Output tensor is NULL");
   }
@@ -371,13 +396,18 @@ emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* dat
   emacs_value emacs_output_shape = env->funcall(env, env->intern(env, "vector"), output_shape_len, emacs_output_shape_items);
   free(emacs_output_shape_items);
 
+  // Free all remaining input allocations
+  for (size_t i = 0; i < n_inputs; i++) {
+    g_ort->ReleaseValue(input_tensors[i]);
+    free(input_vs[i]);
+    free(input_shapes[i]);
+  }
+  free_char_array(input_names, n_inputs);
+
+  // Free all remaining output allocations
   g_ort->ReleaseValue(output_tensor);
-  g_ort->ReleaseValue(input_tensor);
   g_ort->ReleaseTensorTypeAndShapeInfo(output_type_and_shape_info);
-  free(input_flat);
-  free_char_array(input_names, input_names_len);
-  free_char_array(output_names, output_names_len);
-  free(input_shape);
+  free_char_array(output_names, n_outputs);
   free(output_shape);
 
   return env->funcall(env, env->intern(env, "cons"), 2, (emacs_value[]){emacs_output_vector, emacs_output_shape});
