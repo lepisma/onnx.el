@@ -6,7 +6,7 @@
 #include <onnxruntime_c_api.h>
 
 int plugin_is_GPL_compatible;
-const char* onnx_core_version = "0.0.2";
+const char* onnx_core_version = "0.0.3";
 
 const OrtApi* g_ort = NULL;
 emacs_env *g_env = NULL;
