@@ -76,19 +76,21 @@ of a list."
                                (subseq vector (* i step) (* (1+ i) step))
                                (cdr shape)))))))
 
-(defun onnx-run (model input-names output-names input-matrix)
+(defun onnx-run (model input-alist output-names)
   "Run MODEL on INPUT-MATRIX and return the output vector.
 
-INPUT-NAMES is a list of strings identifying the input tap in the
-model, OUTPUT-NAMES is the equivalent for output. We only support
-single input and output for now."
-  (if (and (= (length input-names) 1)
+INPUT-ALIST is an alist of string names mapping to shaped
+matrices that will be taken up by the onnx runtime to pass on to
+the model. OUTPUT-NAMES is a list of string names for output.
+
+We only support single input and single output at the moment."
+  (if (and (= (length input-alist) 1)
            (= (length output-names) 1))
-      (let ((result (onnx-core-run model input-names output-names
-                                   (onnx--matrix-flatten input-matrix)
-                                   (apply #'vector (onnx--matrix-shape input-matrix)))))
+      (let ((result (onnx-core-run model (mapcar #'car input-alist) output-names
+                                   (onnx--matrix-flatten (cdar input-alist))
+                                   (apply #'vector (onnx--matrix-shape (cdar input-alist))))))
         (onnx--vector-reshape (car result) (mapcar #'identity (cdr result))))
-    (error "Input and output name lists should both be of length 1")))
+    (error "Inputs and outputs should both be of length 1")))
 
 (provide 'onnx)
 

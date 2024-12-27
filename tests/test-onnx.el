@@ -27,4 +27,5 @@
       (cl-loop repeat (car shape)
                vconcat (list (random-matrix (cdr shape)))))))
 
-(onnx-run model '("input") '("output") (random-matrix '(20 100)))
+(onnx-run model `(("input" . ,(random-matrix '(20 100)))) '("output"))
+

@@ -16,7 +16,7 @@ Once built, you can load the package and use like the following:
   (setq model (onnx-load "path/to/model.onnx"))
 
   ;; Currently this package only supports CPU execution mode
-  (onnx-run model '("input-node-name") '("output-node-name") input-matrix)
+  (onnx-run model `(("input-node-name" . ,input-matrix)) '("output-node-name"))
 #+end_src
 
 See ~./tests/~ directory for simple examples.
