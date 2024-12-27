@@ -81,16 +81,13 @@ of a list."
 
 INPUT-ALIST is an alist of string names mapping to shaped
 matrices that will be taken up by the onnx runtime to pass on to
-the model. OUTPUT-NAMES is a list of string names for output.
-
-We only support single input and single output at the moment."
-  (if (and (= (length input-alist) 1)
-           (= (length output-names) 1))
+the model. OUTPUT-NAMES is a list of string names for output."
+  (if (= (length output-names) 1)
       (let ((result (onnx-core-run model (mapcar #'car input-alist) output-names
                                    (mapcar (lambda (it) (onnx--matrix-flatten (cdr it))) input-alist)
                                    (mapcar (lambda (it) (apply #'vector (onnx--matrix-shape (cdr it)))) input-alist))))
         (onnx--vector-reshape (car result) (mapcar #'identity (cdr result))))
-    (error "We only support runs with single input and output at the moment.")))
+    (error "Only single output is supported at the moment.")))
 
 (provide 'onnx)
 

@@ -27,19 +27,6 @@ void emacs_signal_error(emacs_env *env, const char* code, const char* message) {
     }                                                           \
   } while (0);
 
-// For now we only work with single input and output models
-void verify_input_output_count(OrtSession* session) {
-  size_t count;
-  ORT_RAISE_ON_ERROR(g_ort->SessionGetInputCount(session, &count));
-  if (count != 1) {
-    emacs_signal_error(g_env, "onnx-model-error", "Model input count is not 1");
-  }
-  ORT_RAISE_ON_ERROR(g_ort->SessionGetOutputCount(session, &count));
-  if (count != 1) {
-    emacs_signal_error(g_env, "onnx-model-error", "Model output count is not 1");
-  }
-}
-
 struct model_t {
   OrtEnv* env;
   OrtSessionOptions* session_options;
@@ -71,9 +58,6 @@ struct model_t load_model(ORTCHAR_T* model_path) {
 
   OrtSession* session;
   ORT_RAISE_ON_ERROR(g_ort->CreateSession(env, model_path, session_options, &session));
-
-  // TODO: Enable check
-  // verify_input_output_count(session);
 
   model.env = env;
   model.session_options = session_options;
