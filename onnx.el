@@ -90,7 +90,7 @@ We only support single input and single output at the moment."
                                    (onnx--matrix-flatten (cdar input-alist))
                                    (apply #'vector (onnx--matrix-shape (cdar input-alist))))))
         (onnx--vector-reshape (car result) (mapcar #'identity (cdr result))))
-    (error "Inputs and outputs should both be of length 1")))
+    (error "We only support runs with single input and output at the moment.")))
 
 (provide 'onnx)
 
