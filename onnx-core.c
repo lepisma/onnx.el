@@ -11,6 +11,12 @@ const char* onnx_core_version = "0.0.3";
 const OrtApi* g_ort = NULL;
 emacs_env *g_env = NULL;
 
+typedef enum emacs_vector_t {
+  EMACS_VECTOR_INTEGER,
+  EMACS_VECTOR_FLOAT,
+  EMACS_VECTOR_UNKNOWN
+} emacs_vector_t;
+
 void emacs_signal_error(emacs_env *env, const char* code, const char* message) {
   emacs_value err_sym = env->intern(env, code);
   emacs_value data = env->make_string(env, message, strlen(message));
@@ -263,6 +269,39 @@ float* emacs_vector_to_float_array(emacs_env* env, emacs_value vector, size_t ve
   return output;
 }
 
+/*
+ * Take a single flat Emacs vector with integer values and convert to a C
+ * int64_t array.
+ */
+int64_t* emacs_vector_to_int64_array(emacs_env* env, emacs_value vector, size_t vector_len) {
+  int64_t* output = malloc(sizeof(int64_t) * vector_len);
+
+  for (size_t i = 0; i < vector_len; i++) {
+    output[i] = env->extract_integer(env, env->vec_get(env, vector, i));
+  }
+
+  return output;
+}
+
+/*
+ * Return type of the Emacs vector by checking its first element. We assume
+ * every other element will be of the same type. Not testing this might cause
+ * issues at some point, but not today. Not today.
+ */
+emacs_vector_t emacs_vector_type(emacs_env* env, emacs_value vector) {
+  // Assuming that the vector is not empty
+  emacs_value it = env->vec_get(env, vector, 0);
+  emacs_value type = env->funcall(env, env->intern(env, "type-of"), 1, (emacs_value[]){it});
+
+  if (env->eq(env, type, env->intern(env, "float"))) {
+    return EMACS_VECTOR_FLOAT;
+  } else if (env->eq(env, type, env->intern(env, "integer"))) {
+    return EMACS_VECTOR_INTEGER;
+  } else {
+    return EMACS_VECTOR_UNKNOWN;
+  }
+}
+
 size_t prod_array_size_t(size_t* array, size_t len) {
   size_t output;
   for (size_t i = 0; i < len; i++) {
@@ -297,19 +336,42 @@ emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* dat
   size_t n_outputs;
   char** output_names = get_list_of_strings(env, args[2], &n_outputs);
 
-  size_t input_lens[n_inputs];            // Lengths of input vectors
-  float* input_vs[n_inputs];              // Flat input vectors
-  size_t input_shapes_lens[n_inputs];     // Lengths of input shape vectors
-  size_t* input_shapes[n_inputs];         // Input shape vectors
+  size_t input_lens[n_inputs];              // Lengths of input vectors
+  void* input_vs[n_inputs];                 // Flat input vectors
+  emacs_vector_t input_vs_types[n_inputs];  // Types of input vectors
+  size_t input_shapes_lens[n_inputs];       // Lengths of input shape vectors
+  size_t* input_shapes[n_inputs];           // Input shape vectors
 
   emacs_value vector;
   emacs_value shape_vector;
   for (size_t i = 0; i < n_inputs; i++) {
     vector = list_nth(env, args[3], i);
+    input_vs_types[i] = emacs_vector_type(env, vector);
     shape_vector = list_nth(env, args[4], i);
 
     input_lens[i] = env->vec_size(env, vector);
-    input_vs[i] = emacs_vector_to_float_array(env, vector, input_lens[i]);
+
+    // Note that this type testing and parsing should ideally happen by checking
+    // the model's inputs and not based on what the user is passing. This
+    // difference might show up in places where there is a difference in number
+    // of bits for the same broad type (say int with 8 bit or 64 bit).
+    switch (input_vs_types[i]) {
+    case EMACS_VECTOR_INTEGER:
+      int64_t* int_input_vs = emacs_vector_to_int64_array(env, vector, input_lens[i]);
+      input_vs[i] = (void*)int_input_vs;
+      break;
+    case EMACS_VECTOR_FLOAT:
+      float* float_input_vs = emacs_vector_to_float_array(env, vector, input_lens[i]);
+      input_vs[i] = (void*)float_input_vs;
+      break;
+    case EMACS_VECTOR_UNKNOWN:
+      emacs_signal_error(env, "onnx-type-error", "Input vector of unknown type provided");
+      return env->intern(env, "nil");
+    default:
+      emacs_signal_error(env, "onnx-type-error", "Input vector of unknown type provided");
+      return env->intern(env, "nil");
+    }
+
     input_shapes_lens[i] = env->vec_size(env, shape_vector);
     input_shapes[i] = emacs_vector_to_size_array(env, shape_vector, input_shapes_lens[i]);
   }
@@ -317,14 +379,23 @@ emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* dat
   OrtMemoryInfo* memory_info;
   ORT_RAISE_ON_ERROR(g_ort->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info));
 
-  OrtValue* input_tensors[n_inputs];
-
+  OrtValue** input_tensors = malloc(sizeof(OrtValue*) * n_inputs);
   int is_tensor;
   for (size_t i = 0; i < n_inputs; i++) {
-    ORT_RAISE_ON_ERROR(g_ort->CreateTensorWithDataAsOrtValue(
-        memory_info, input_vs[i], input_lens[i] * sizeof(float),
-        input_shapes[i], input_shapes_lens[i],
-        ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input_tensors[i]));
+    // Since type check has happened earlier, we will just care about the two
+    // valid branches here
+    switch (input_vs_types[i]) {
+    case EMACS_VECTOR_INTEGER:
+      ORT_RAISE_ON_ERROR(g_ort->CreateTensorWithDataAsOrtValue(memory_info, input_vs[i], input_lens[i] * sizeof(int64_t),
+                                                               input_shapes[i], input_shapes_lens[i],
+                                                               ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &input_tensors[i]));
+      break;
+    case EMACS_VECTOR_FLOAT:
+      ORT_RAISE_ON_ERROR(g_ort->CreateTensorWithDataAsOrtValue(memory_info, input_vs[i], input_lens[i] * sizeof(float),
+                                                               input_shapes[i], input_shapes_lens[i],
+                                                               ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input_tensors[i]));
+      break;
+    }
 
     if (input_tensors[i] == NULL) {
         emacs_signal_error(env, "onnx-error", "One of the input tensors is NULL");
@@ -338,12 +409,12 @@ emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* dat
     }
   }
 
-  g_ort->ReleaseMemoryInfo(memory_info);
-
   OrtValue* output_tensor = NULL;
   ORT_RAISE_ON_ERROR(g_ort->Run(model->session, NULL,
                                 (const char* const*)input_names, (const OrtValue* const*)input_tensors, n_inputs,
                                 (const char* const*)output_names, n_outputs, &output_tensor));
+  g_ort->ReleaseMemoryInfo(memory_info);
+
   if (output_tensor == NULL) {
     emacs_signal_error(env, "onnx-error", "Output tensor is NULL");
   }
@@ -352,6 +423,7 @@ emacs_value Fonnx_run(emacs_env* env, ptrdiff_t n, emacs_value args[], void* dat
     emacs_signal_error(env, "onnx-error", "Unable to build output tensor");
   }
 
+  // This is an assumption that the output type is known to be float
   float* output_tensor_data = NULL;
   ORT_RAISE_ON_ERROR(g_ort->GetTensorMutableData(output_tensor, (void**)&output_tensor_data));
 
