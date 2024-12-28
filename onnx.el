@@ -32,6 +32,7 @@
 
 (require 'onnx-core)
 (require 'cl-macs)
+(require 'cl-extra)
 
 (defun onnx-load (filepath)
   "Load onnx file from FILEPATH and return a model object."
@@ -73,7 +74,7 @@ of a list."
       (apply #'vector
              (cl-loop for i from 0 below rows
                       collect (onnx--vector-reshape
-                               (subseq vector (* i step) (* (1+ i) step))
+                               (cl-subseq vector (* i step) (* (1+ i) step))
                                (cdr shape)))))))
 
 (defun onnx-run (model input-alist output-names)
