@@ -63,8 +63,8 @@
        (token-type-ids [[0 0 0 0 0 0 0]
                         [0 0 0 0 0 0 0]])
        (output (onnx-run model `(("input_ids" . ,input-ids)
-                                     ("attention_mask" . ,attention-mask)
-                                     ("token_type_ids" . ,token-type-ids))
+                                 ("attention_mask" . ,attention-mask)
+                                 ("token_type_ids" . ,token-type-ids))
                          '("last_hidden_state"))))
   (setq output (onnx-ml-utils-nmean-pool output attention-mask))
   (onnx-ml-utils-nl2-normalize output)
