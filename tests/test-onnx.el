@@ -53,8 +53,12 @@
 ;; This test uses the tokenizers.el library to go from text to embedding
 (require 'tokenizers)
 
+(setq tk (tokenizers-from-pretrained "sentence-transformers/all-MiniLM-L6-v2"))
+;; This is important for getting the same results as in
+;; sentence-transformers
+(tokenizers-enable-padding tk 0 "[PAD]")
+
 (let* ((sentences ["This is an example sentence" "Each sentence is converted"])
-       (tk (tokenizers-from-pretrained "sentence-transformers/all-MiniLM-L6-v2"))
        (tk-output (tokenizers-encode-batch tk sentences t)))
   (onnx-run model `(("input_ids" . ,(nth 0 tk-output))
                     ("attention_mask" . ,(nth 2 tk-output))
