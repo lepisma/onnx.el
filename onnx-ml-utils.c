@@ -41,8 +41,15 @@ void nl2_normalize(emacs_env* env, emacs_value vector) {
   }
 }
 
+/*
+ * L2 normalize a 2D matrix along axis=1
+ */
 emacs_value Fnl2_normalize(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
-  nl2_normalize(env, args[0]);
+  size_t n_rows = env->vec_size(env, args[0]);
+
+  for (size_t i = 0; i < n_rows; i++) {
+    nl2_normalize(env, env->vec_get(env, args[0], i));
+  }
 
   return env->intern(env, "nil");
 }
@@ -55,7 +62,7 @@ int emacs_module_init(struct emacs_runtime* runtime) {
   if (env->size < sizeof(*env))
     return 2;
 
-  emacs_value nl2_normalize_fn = env->make_function(env, 1, 1, Fnl2_normalize, "Normalize numerical vector destructively.", NULL);
+  emacs_value nl2_normalize_fn = env->make_function(env, 1, 1, Fnl2_normalize, "Normalize numerical 2D matrix (Batch x Embedding dimension) destructively.", NULL);
   emacs_value nl2_normalize_fn_args[] = {env->intern(env, "onnx-ml-utils-nl2-normalize"), nl2_normalize_fn};
   env->funcall(env, env->intern(env, "defalias"), 2, nl2_normalize_fn_args);
 

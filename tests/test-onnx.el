@@ -64,3 +64,10 @@
                     ("attention_mask" . ,(nth 2 tk-output))
                     ("token_type_ids" . ,(nth 1 tk-output)))
             '("last_hidden_state")))
+
+;;; Tests for post-processing
+(require 'onnx-ml-utils)
+
+(let ((input [[1.0 1.0 1.0] [0.0 0.0 0.0]]))
+  (onnx-ml-utils-nl2-normalize input)
+  input) ; (/ 1 (sqrt 3))
