@@ -27,7 +27,7 @@
 ;; -> ("output")
 (onnx-run model `(("input" . ,(random-matrix '(20 100)))) '("output"))
 
-;;; Tests for a model complex sentence transformer model
+;;; Tests for a complex sentence transformer model
 ;; This is the all-MiniLM-L6-v2 model's O2 version which you might
 ;; have to download (not shipped in the repository since it's a large
 ;; file)
@@ -48,4 +48,15 @@
   (onnx-run model `(("input_ids" . ,input-ids)
                     ("attention_mask" . ,attention-mask)
                     ("token_type_ids" . ,token-type-ids))
+            '("last_hidden_state")))
+
+;; This test uses the tokenizers.el library to go from text to embedding
+(require 'tokenizers)
+
+(let* ((sentences ["This is an example sentence" "Each sentence is converted"])
+       (tk (tokenizers-from-pretrained "sentence-transformers/all-MiniLM-L6-v2"))
+       (tk-output (tokenizers-encode-batch tk sentences t)))
+  (onnx-run model `(("input_ids" . ,(nth 0 tk-output))
+                    ("attention_mask" . ,(nth 2 tk-output))
+                    ("token_type_ids" . ,(nth 1 tk-output)))
             '("last_hidden_state")))
