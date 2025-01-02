@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 
 int plugin_is_GPL_compatible;
@@ -54,6 +55,70 @@ emacs_value Fnl2_normalize(emacs_env* env, ptrdiff_t n, emacs_value args[], void
   return env->intern(env, "nil");
 }
 
+/*
+ * Destructively mask a float matrix (Batch x Length x Embedding dimension)
+ * vector using integer mask matrix (Batch x Length).
+ */
+void nmask(emacs_env* env, emacs_value matrix, emacs_value mask_matrix) {
+  size_t n_batch = env->vec_size(env, matrix);
+  size_t n_length = env->vec_size(env, env->vec_get(env, matrix, 0));
+  size_t n_dim = env->vec_size(env, env->vec_get(env, env->vec_get(env, matrix, 0), 0));
+
+  int mask;
+  for (size_t i = 0; i < n_batch; i++) {
+    for (size_t j = 0; j < n_length; j++) {
+      mask = env->extract_integer(env, env->vec_get(env, env->vec_get(env, mask_matrix, i), j));
+      for (size_t k = 0; k < n_dim; k++) {
+        if (mask == 0) {
+          env->vec_set(env, env->vec_get(env, env->vec_get(env, matrix, i), j), k, env->make_float(env, 0.0));
+        }
+      }
+    }
+  }
+}
+
+emacs_value Fnmean_pool(emacs_env* env, ptrdiff_t n, emacs_value args[], void* data) {
+  nmask(env, args[0], args[1]);
+
+  // All these assume that we really get 3D matrix as input
+  size_t n_batch = env->vec_size(env, args[0]);
+  size_t n_length = env->vec_size(env, env->vec_get(env, args[0], 0));
+  size_t n_dim = env->vec_size(env, env->vec_get(env, env->vec_get(env, args[0], 0), 0));
+
+  // Count (not really since this also has an EPS in case the value is zero) of
+  // non-zero elements in each item of the batch. This will become the
+  // denominator in mean division.
+  double* elem_counts = malloc(sizeof(double) * n_batch);
+  emacs_value vec;
+  for (size_t i = 0; i < n_batch; i++) {
+    vec = env->vec_get(env, args[1], i);
+
+    elem_counts[i] = 0;
+    for (size_t j = 0; j < n_length; j++) {
+      elem_counts[i] = elem_counts[i] + env->extract_integer(env, env->vec_get(env, vec, j));
+    }
+    if (elem_counts[i] == 0) {
+      elem_counts[i] = EPS;
+    }
+  }
+
+  // Sums along the n_length dimension
+  emacs_value output = env->funcall(env, env->intern(env, "make-vector"), 2, (emacs_value[]){env->make_integer(env, n_batch), env->make_integer(env, 0)});
+  for (size_t i = 0; i < n_batch; i++) {
+    env->vec_set(env, output, i, env->funcall(env, env->intern(env, "make-vector"), 2, (emacs_value[]){env->make_integer(env, n_dim), env->make_integer(env, 0)}));
+    for (size_t k = 0; k < n_dim; k++) {
+      double sum = 0;
+      for (size_t j = 0; j < n_length; j++) {
+        sum += env->extract_float(env, env->vec_get(env, env->vec_get(env, env->vec_get(env, args[0], i), j), k));
+      }
+      env->vec_set(env, env->vec_get(env, output, i), k, env->make_float(env, sum / elem_counts[i]));
+    }
+  }
+
+  free(elem_counts);
+  return output;
+}
+
 int emacs_module_init(struct emacs_runtime* runtime) {
   if (runtime->size < sizeof(*runtime))
     return 1;
@@ -65,6 +130,10 @@ int emacs_module_init(struct emacs_runtime* runtime) {
   emacs_value nl2_normalize_fn = env->make_function(env, 1, 1, Fnl2_normalize, "Normalize numerical 2D matrix (Batch x Embedding dimension) destructively.", NULL);
   emacs_value nl2_normalize_fn_args[] = {env->intern(env, "onnx-ml-utils-nl2-normalize"), nl2_normalize_fn};
   env->funcall(env, env->intern(env, "defalias"), 2, nl2_normalize_fn_args);
+
+  emacs_value nmean_pool_fn = env->make_function(env, 2, 2, Fnmean_pool, "Mean pool input matrix (Batch x Length x Embedding dimension) with attention mask (Batch x Length) and return new matrix (Batch x Embedding Dimension), destructively.", NULL);
+  emacs_value nmean_pool_fn_args[] = {env->intern(env, "onnx-ml-utils-nmean-pool"), nmean_pool_fn};
+  env->funcall(env, env->intern(env, "defalias"), 2, nmean_pool_fn_args);
 
   emacs_value provide_fn_args[] = {env->intern(env, "onnx-ml-utils")};
   env->funcall(env, env->intern(env, "provide"), 1, provide_fn_args);

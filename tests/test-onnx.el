@@ -71,3 +71,9 @@
 (let ((input [[1.0 1.0 1.0] [0.0 0.0 0.0]]))
   (onnx-ml-utils-nl2-normalize input)
   input) ; (/ 1 (sqrt 3))
+
+;; Input is 2x4x5
+(let ((input [[[1.0 1.0 1.0 10.0 1.0] [1.0 1.0 2.0 20.0 1.0] [1.0 1.0 3.0 30.0 5.0] [1.0 1.0 4.0 40.0 50.0]]
+	      [[0.0 0.0 0.0 0.0 0.0] [0.0 0.0 0.0 0.0 0.0] [0.0 0.0 0.0 0.0 0.0] [0.0 0.0 0.0 0.0 0.0]]])
+      (attention-mask [[1 1 1 0] [1 1 1 1]]))
+  (onnx-ml-utils-nmean-pool input attention-mask))
