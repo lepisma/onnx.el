@@ -4,11 +4,21 @@ ONNX runtime for Emacs Lisp. Primary motivation is to allow ML based text
 operations inside Emacs, as much as possible, natively.
 
 * Installation and Usage
-Since the package in under development, you will have to manually compile the
-dynamic module. To do so run ~make~ after ensuring that you have [[https://onnxruntime.ai/][onnxruntime]]
-development package installed for your distro.
+There is a dynamic module that needs you to have [[https://onnxruntime.ai/][onnxruntime]] development package
+installed for your distro. This module is automatically compiled when you
+install the package using something like this:
 
-Once built, you can load the package and use like the following:
+#+begin_src emacs-lisp
+(use-package onnx
+  :vc (:fetcher github :repo lepisma/onnx.el)
+  :demand t)
+#+end_src
+
+Note that this method only handles creating ~.so~ files which means it won’t work
+on non-Linux systems yet. For other systems, manually inspect the ~Makefile~ and
+compile the module yourself.
+
+Once built and installed, you can load the package and use like the following:
 
 #+begin_src emacs-lisp
   (require 'onnx)

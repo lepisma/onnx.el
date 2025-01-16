@@ -30,8 +30,24 @@
 
 ;;; Code:
 
-(require 'onnx-core)
 (require 'cl-macs)
+
+(cl-eval-when (load eval)
+  (unless (require 'onnx-core nil t)
+    (if (or noninteractive
+            (yes-or-no-p "Module onnx-core must be built.  Do so now? "))
+        (let ((default-directory (file-name-directory (or load-file-name
+                                                          buffer-file-name)))
+              (build-command "make release"))
+
+          (message "Building onnx-core module with %S" build-command)
+          (with-temp-buffer
+            (unless (zerop (call-process-shell-command build-command nil t t))
+              (error "Failed to compile module onnx-core: %s" (buffer-substring-no-properties (point-min) (point-max)))))
+          (message "Loading onnx-core")
+          (require 'onnx-core))
+      (user-error "Abort compilation for onnx-core"))))
+
 (require 'cl-extra)
 
 (defun onnx-load (filepath)
